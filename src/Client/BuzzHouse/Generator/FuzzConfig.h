@@ -153,7 +153,7 @@ public:
 
     FuzzConfig(DB::ClientBase * c, const String & path);
 
-    bool processServerQuery(const String & input) const;
+    bool processServerQuery(const String & query) const;
 
 private:
     void loadServerSettings(DB::Strings & out, bool distinct, const String & table, const String & col) const;

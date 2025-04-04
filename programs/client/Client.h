@@ -24,12 +24,13 @@ public:
 
     int main(const std::vector<String> & /*args*/) override;
 
+    bool tryToReconnect(uint32_t max_reconnection_attempts, uint32_t time_to_sleep_between) override;
 protected:
     Poco::Util::LayeredConfiguration & getClientConfiguration() override;
 
-    bool processWithFuzzing(const String & full_query) override;
+    bool processWithASTFuzzer(const String & full_query) override;
     bool buzzHouse() override;
-    std::optional<bool> processFuzzingStep(const String & query_to_execute, const ASTPtr & parsed_query, bool permissive);
+    bool processASTFuzzerStep(const String & query_to_execute, const ASTPtr & parsed_query);
 
     void connect() override;
 
@@ -63,7 +64,6 @@ private:
     std::unique_ptr<BuzzHouse::FuzzConfig> fuzz_config;
     std::unique_ptr<BuzzHouse::ExternalIntegrations> external_integrations;
 
-    bool logAndProcessQuery(std::ofstream & outf, const String & full_query);
     bool processBuzzHouseQuery(const String & full_query);
 #endif
     void parseConnectionsCredentials(Poco::Util::AbstractConfiguration & config, const std::string & connection_name);

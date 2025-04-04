@@ -224,16 +224,24 @@ FuzzConfig::FuzzConfig(DB::ClientBase * c, const String & path)
     }
 }
 
-bool FuzzConfig::processServerQuery(const String & input) const
+bool FuzzConfig::processServerQuery(const String & query) const
 {
     try
     {
-        return this->cb->processTextAsSingleQuery(input);
+        if (this->cb->processTextAsSingleQuery(query))
+        {
+            return true;
+        }
     }
     catch (...)
     {
-        return false;
     }
+    fmt::print(stderr, "Error on processing query '{}'\n", query);
+    if (!this->cb->tryToReconnect(1, 1000))
+    {
+        throw DB::Exception(DB::ErrorCodes::BUZZHOUSE, "Couldn't not reconnect to the server");
+    }
+    return false;
 }
 
 void FuzzConfig::loadServerSettings(DB::Strings & out, const bool distinct, const String & table, const String & col) const

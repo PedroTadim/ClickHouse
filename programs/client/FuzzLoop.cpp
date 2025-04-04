@@ -45,46 +45,36 @@ extern const int TOO_DEEP_RECURSION;
 extern const int BUZZHOUSE;
 }
 
-std::optional<bool> Client::processFuzzingStep(const String & query_to_execute, const ASTPtr & parsed_query, const bool permissive)
+bool Client::tryToReconnect(const uint32_t max_reconnection_attempts, const uint32_t time_to_sleep_between)
 {
-    processParsedSingleQuery(query_to_execute, query_to_execute, parsed_query);
-
-    const auto * exception = server_exception ? server_exception.get() : client_exception.get();
-    // Sometimes you may get TOO_DEEP_RECURSION from the server,
-    // and TOO_DEEP_RECURSION should not fail the fuzzer check.
-    if (permissive && have_error && exception->code() == ErrorCodes::TOO_DEEP_RECURSION)
-    {
-        have_error = false;
-        server_exception.reset();
-        client_exception.reset();
-        return true;
-    }
-
     if (have_error)
     {
-        fmt::print(stderr, "Error on processing query '{}': {}\n", parsed_query->formatForErrorMessage(), exception->message());
-
         // Try to reconnect after errors, for two reasons:
         // 1. We might not have realized that the server died, e.g. if
         //    it sent us a <Fatal> trace and closed connection properly.
         // 2. The connection might have gotten into a wrong state and
         //    the next query will get false positive about
         //    "Unknown packet from server".
-        try
+        for (uint32_t i = 0; i < max_reconnection_attempts; i++)
         {
-            connection->forceConnected(connection_parameters.timeouts);
-        }
-        catch (...)
-        {
-            // Just report it, we'll terminate below.
-            fmt::print(stderr, "Error while reconnecting to the server: {}\n", getCurrentExceptionMessage(true));
+            try
+            {
+                connection->forceConnected(connection_parameters.timeouts);
+                break;
+            }
+            catch (...)
+            {
+                // Just report it, we'll terminate below.
+                fmt::print(stderr, "Error while reconnecting to the server: {}\n", getCurrentExceptionMessage(true));
 
-            // The reconnection might fail, but we'll still be connected
-            // in the sense of `connection->isConnected() = true`,
-            // in case when the requested database doesn't exist.
-            // Disconnect manually now, so that the following code doesn't
-            // have any doubts, and the connection state is predictable.
-            connection->disconnect();
+                // The reconnection might fail, but we'll still be connected
+                // in the sense of `connection->isConnected() = true`,
+                // in case when the requested database doesn't exist.
+                // Disconnect manually now, so that the following code doesn't
+                // have any doubts, and the connection state is predictable.
+                connection->disconnect();
+                std::this_thread::sleep_for(std::chrono::milliseconds(time_to_sleep_between));
+            }
         }
     }
 
@@ -98,14 +88,34 @@ std::optional<bool> Client::processFuzzingStep(const String & query_to_execute, 
         // reproduce the error.
         printChangedSettings();
 
-        return permissive; //for BuzzHouse, don't continue on error
+        return false;
     }
+    return true;
+}
 
-    return std::nullopt;
+bool Client::processASTFuzzerStep(const String & query_to_execute, const ASTPtr & parsed_query)
+{
+    processParsedSingleQuery(query_to_execute, query_to_execute, parsed_query);
+
+    const auto * exception = server_exception ? server_exception.get() : client_exception.get();
+    // Sometimes you may get TOO_DEEP_RECURSION from the server,
+    // and TOO_DEEP_RECURSION should not fail the fuzzer check.
+    if (have_error && exception->code() == ErrorCodes::TOO_DEEP_RECURSION)
+    {
+        have_error = false;
+        server_exception.reset();
+        client_exception.reset();
+        return true;
+    }
+    if (have_error)
+    {
+        fmt::print(stderr, "Error on processing query '{}': {}\n", parsed_query->formatForErrorMessage(), exception->message());
+    }
+    return tryToReconnect(1, 1000);
 }
 
 /// Returns false when server is not available.
-bool Client::processWithFuzzing(const String & full_query)
+bool Client::processWithASTFuzzer(const String & full_query)
 {
     ASTPtr orig_ast;
 
@@ -312,8 +322,9 @@ bool Client::processWithFuzzing(const String & full_query)
 #endif
 
             fmt::print(stdout, "Dump of fuzzed AST:\n{}\n", query_to_execute);
-            if (auto res = processFuzzingStep(query_to_execute, ast_to_process, true))
-                return *res;
+            const auto res = processASTFuzzerStep(query_to_execute, ast_to_process);
+            if (!res)
+                return res;
 
 #if USE_BUZZHOUSE
             if (measure_performance)
@@ -424,8 +435,9 @@ bool Client::processWithFuzzing(const String & full_query)
         try
         {
             query_to_execute = query->formatForErrorMessage();
-            if (auto res = processFuzzingStep(query_to_execute, query, false))
-                return *res;
+            const auto res = processASTFuzzerStep(query_to_execute, query);
+            if (!res)
+                return res;
         }
         catch (...)
         {
@@ -444,7 +456,7 @@ bool Client::processWithFuzzing(const String & full_query)
 #if USE_BUZZHOUSE
         if (can_compare)
         {
-            auto u = external_integrations->performQuery(BuzzHouse::PeerTableDatabase::ClickHouse, query_to_execute);
+            const auto u = external_integrations->performQuery(BuzzHouse::PeerTableDatabase::ClickHouse, query_to_execute);
             UNUSED(u);
         }
 #endif
@@ -454,12 +466,6 @@ bool Client::processWithFuzzing(const String & full_query)
 }
 
 #if USE_BUZZHOUSE
-
-bool Client::logAndProcessQuery(std::ofstream & outf, const String & full_query)
-{
-    outf << full_query << std::endl;
-    return processTextAsSingleQuery(full_query);
-}
 
 bool Client::processBuzzHouseQuery(const String & full_query)
 {
@@ -471,16 +477,10 @@ bool Client::processBuzzHouseQuery(const String & full_query)
     {
         const char * begin = full_query.data();
 
-        if ((orig_ast = parseQuery(begin, begin + full_query.size(), client_context->getSettingsRef(), false)))
-        {
-            String query_to_execute = orig_ast->formatWithSecretsOneLine();
-            const auto res = processFuzzingStep(query_to_execute, orig_ast, false);
-            server_up &= res.value_or(true);
-        }
-        else
-        {
-            have_error = true;
-        }
+        orig_ast = parseQuery(begin, begin + full_query.size(), client_context->getSettingsRef(), false);
+        const String query_to_execute = orig_ast->formatWithSecretsOneLine();
+        processParsedSingleQuery(query_to_execute, query_to_execute, orig_ast);
+        server_up &= tryToReconnect(1, 1000);
     }
     catch (...)
     {
@@ -493,13 +493,9 @@ bool Client::processBuzzHouseQuery(const String & full_query)
         client_exception = std::make_unique<Exception>(getCurrentExceptionMessageAndPattern(print_stack_trace), getCurrentExceptionCode());
         have_error = true;
     }
-    if (have_error)
+    if (have_error && orig_ast)
     {
-        // Query completed with error, keep the previous starting AST.
-        // Also discard the exception that we now know to be non-fatal,
-        // so that it doesn't influence the exit code.
-        server_exception.reset();
-        client_exception.reset();
+        fmt::print(stderr, "Error on processing query '{}': {}\n", orig_ast->formatForErrorMessage(), client_exception->message());
     }
     return server_up;
 }
@@ -568,9 +564,9 @@ bool Client::buzzHouse()
         std::cout << "Cloud features " << (has_cloud_features ? "" : "not ") << "detected" << std::endl;
         replica_setup &= processTextAsSingleQuery("CREATE TABLE tx (c0 Int) Engine=ReplicatedMergeTree() ORDER BY tuple();");
         std::cout << "Replica setup " << (replica_setup ? "" : "not ") << "detected" << std::endl;
-        auto u = processTextAsSingleQuery("DROP TABLE IF EXISTS tx;");
+        const auto u = processTextAsSingleQuery("DROP TABLE IF EXISTS tx;");
         UNUSED(u);
-        auto v = processTextAsSingleQuery("DROP DATABASE IF EXISTS fuzztest;");
+        const auto v = processTextAsSingleQuery("DROP DATABASE IF EXISTS fuzztest;");
         UNUSED(v);
 
         outf << "--Session seed: " << rg.getSeed() << std::endl;
@@ -583,8 +579,12 @@ bool Client::buzzHouse()
             full_query += fmt::format("{}{} = 1", first ? "" : ", ", entry);
             first = false;
         }
-        auto w = logAndProcessQuery(outf, fmt::format("SET {};", full_query));
-        UNUSED(w);
+        const String set = fmt::format("SET {};", full_query);
+        outf << set << std::endl;
+        if (!processTextAsSingleQuery(set))
+        {
+            throw DB::Exception(DB::ErrorCodes::BUZZHOUSE, "Couldn't setup connection settings");
+        }
         if (external_integrations->hasClickHouseExtraServerConnection())
         {
             external_integrations->setDefaultSettings(BuzzHouse::PeerTableDatabase::ClickHouse, defaultSettings);

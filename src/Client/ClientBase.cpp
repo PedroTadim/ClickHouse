@@ -2606,7 +2606,7 @@ bool ClientBase::executeMultiQuery(const String & all_queries_text)
 
                 if (query_fuzzer_runs)
                 {
-                    if (!processWithFuzzing(full_query))
+                    if (!processWithASTFuzzer(full_query))
                         return false;
 
                     this_query_begin = this_query_end;
@@ -2806,7 +2806,7 @@ bool ClientBase::processQueryText(const String & text)
 
     if (query_fuzzer_runs)
     {
-        processWithFuzzing(text);
+        processWithASTFuzzer(text);
         return true;
     }
 
@@ -3443,7 +3443,7 @@ void ClientBase::runNonInteractive()
         {
             if (query_fuzzer_runs)
             {
-                if (!processWithFuzzing(query))
+                if (!processWithASTFuzzer(query))
                     return;
             }
             else
@@ -3461,7 +3461,7 @@ void ClientBase::runNonInteractive()
         String text;
         readStringUntilEOF(text, in);
         if (query_fuzzer_runs)
-            processWithFuzzing(text);
+            processWithASTFuzzer(text);
         else
             processQueryText(text);
     }

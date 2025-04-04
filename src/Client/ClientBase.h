@@ -107,6 +107,11 @@ public:
     bool processTextAsSingleQuery(const String & full_query);
 
     std::string getConnectionHostAndPortForFuzzing() const;
+
+    virtual bool tryToReconnect(const uint32_t, const uint32_t)
+    {
+        throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Reconnection is not implemented");
+    }
 protected:
     void runInteractive();
     void runNonInteractive();
@@ -117,7 +122,7 @@ protected:
     /// This is the analogue of Poco::Application::config()
     virtual Poco::Util::LayeredConfiguration & getClientConfiguration() = 0;
 
-    virtual bool processWithFuzzing(const String &)
+    virtual bool processWithASTFuzzer(const String &)
     {
         throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Query processing with fuzzing is not implemented");
     }
