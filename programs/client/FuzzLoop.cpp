@@ -818,7 +818,7 @@ bool Client::buzzHouse()
                 }
                 else if (restart_client && nopt < (correctness_oracle + settings_oracle + dump_oracle + peer_oracle + restart_client + 1))
                 {
-                    outf << "Reconnecting client" << std::endl;
+                    outf << "--Reconnecting client" << std::endl;
                     connection->disconnect();
                     server_up &= tryToReconnect(fuzz_config->max_reconnection_attempts, fuzz_config->time_to_sleep_between_reconnects);
                 }
