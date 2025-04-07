@@ -648,8 +648,9 @@ bool Client::buzzHouse()
                     = 30 * static_cast<uint32_t>(gen.collectionHas<BuzzHouse::SQLTable>(gen.attached_tables_to_test_format));
                 const uint32_t peer_oracle
                     = 30 * static_cast<uint32_t>(gen.collectionHas<BuzzHouse::SQLTable>(gen.attached_tables_for_table_peer_oracle));
+                const uint32_t restart_client = 1 * static_cast<uint32_t>(fuzz_config->allow_client_restarts);
                 const uint32_t run_query = 910;
-                const uint32_t prob_space = correctness_oracle + settings_oracle + dump_oracle + peer_oracle + run_query;
+                const uint32_t prob_space = correctness_oracle + settings_oracle + dump_oracle + peer_oracle + restart_client + run_query;
                 std::uniform_int_distribution<uint32_t> next_dist(1, prob_space);
                 const uint32_t nopt = next_dist(rg.generator);
 
@@ -815,7 +816,14 @@ bool Client::buzzHouse()
                     }
                     qo.processSecondOracleQueryResult(has_success, *external_integrations, "Peer table query");
                 }
-                else if (run_query && nopt < (correctness_oracle + settings_oracle + dump_oracle + peer_oracle + run_query + 1))
+                else if (restart_client && nopt < (correctness_oracle + settings_oracle + dump_oracle + peer_oracle + restart_client + 1))
+                {
+                    outf << "Reconnecting client" << std::endl;
+                    connection->disconnect();
+                    server_up &= tryToReconnect(fuzz_config->max_reconnection_attempts, fuzz_config->time_to_sleep_between_reconnects);
+                }
+                else if (
+                    run_query && nopt < (correctness_oracle + settings_oracle + dump_oracle + peer_oracle + restart_client + run_query + 1))
                 {
                     gen.generateNextStatement(rg, sq1);
                     BuzzHouse::SQLQueryToString(full_query, sq1);

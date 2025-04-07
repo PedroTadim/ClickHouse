@@ -136,6 +136,7 @@ FuzzConfig::FuzzConfig(DB::ClientBase * c, const String & path)
         {"compare_success_results", [&](const JSONObjectType & value) { compare_success_results = value.getBool(); }},
         {"allow_infinite_tables", [&](const JSONObjectType & value) { allow_infinite_tables = value.getBool(); }},
         {"allow_memory_tables", [&](const JSONObjectType & value) { allow_memory_tables = value.getBool(); }},
+        {"allow_client_restarts", [&](const JSONObjectType & value) { allow_client_restarts = value.getBool(); }},
         {"max_reconnection_attempts",
          [&](const JSONObjectType & value)
          { max_reconnection_attempts = std::max(UINT32_C(1), static_cast<uint32_t>(value.getUInt64())); }},
