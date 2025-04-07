@@ -48,7 +48,7 @@ extern const int BUZZHOUSE;
 bool Client::tryToReconnect(const uint32_t max_reconnection_attempts, const uint32_t time_to_sleep_between_reconnects)
 {
     chassert(max_reconnection_attempts);
-    if (have_error)
+    if (!connection->isConnected())
     {
         // Try to reconnect after errors, for two reasons:
         // 1. We might not have realized that the server died, e.g. if
@@ -485,7 +485,6 @@ bool Client::processBuzzHouseQuery(const String & full_query)
         {
             const String query_to_execute = orig_ast->formatWithSecretsOneLine();
             processParsedSingleQuery(query_to_execute, query_to_execute, orig_ast);
-            server_up &= tryToReconnect(fuzz_config->max_reconnection_attempts, fuzz_config->time_to_sleep_between_reconnects);
         }
         else
         {
@@ -494,19 +493,21 @@ bool Client::processBuzzHouseQuery(const String & full_query)
     }
     catch (...)
     {
-        // Some functions (e.g. protocol parsers) don't throw, but
-        // set last_exception instead, so we'll also do it here for
-        // uniformity.
-        // Surprisingly, this is a client exception, because we get the
-        // server exception w/o throwing (see onReceiveException()).
-        server_up &= connection->isConnected();
         client_exception = std::make_unique<Exception>(getCurrentExceptionMessageAndPattern(print_stack_trace), getCurrentExceptionCode());
         have_error = true;
     }
     if (have_error && orig_ast)
     {
         const auto * exception = server_exception ? server_exception.get() : client_exception.get();
-        fmt::print(stderr, "Error on processing query '{}': {}\n", orig_ast->formatForErrorMessage(), exception->message());
+        fmt::print(
+            stderr,
+            "Error on processing query '{}': {}\n",
+            orig_ast->formatForErrorMessage(),
+            exception ? exception->message() : "no exception");
+    }
+    if (have_error)
+    {
+        server_up &= tryToReconnect(fuzz_config->max_reconnection_attempts, fuzz_config->time_to_sleep_between_reconnects);
     }
     return server_up;
 }
