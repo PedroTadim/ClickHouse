@@ -83,7 +83,10 @@ DatabaseEngineValues StatementGenerator::getNextDatabaseEngine(RandomGenerator &
 {
     chassert(this->ids.empty());
     this->ids.emplace_back(DAtomic);
-    this->ids.emplace_back(DMemory);
+    if (fc.allow_memory_tables)
+    {
+        this->ids.emplace_back(DMemory);
+    }
     if (replica_setup)
     {
         this->ids.emplace_back(DReplicated);

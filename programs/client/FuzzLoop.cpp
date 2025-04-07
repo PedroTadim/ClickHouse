@@ -45,8 +45,9 @@ extern const int TOO_DEEP_RECURSION;
 extern const int BUZZHOUSE;
 }
 
-bool Client::tryToReconnect(const uint32_t max_reconnection_attempts, const uint32_t time_to_sleep_between)
+bool Client::tryToReconnect(const uint32_t max_reconnection_attempts, const uint32_t time_to_sleep_between_reconnects)
 {
+    chassert(max_reconnection_attempts);
     if (have_error)
     {
         // Try to reconnect after errors, for two reasons:
@@ -73,7 +74,10 @@ bool Client::tryToReconnect(const uint32_t max_reconnection_attempts, const uint
                 // Disconnect manually now, so that the following code doesn't
                 // have any doubts, and the connection state is predictable.
                 connection->disconnect();
-                std::this_thread::sleep_for(std::chrono::milliseconds(time_to_sleep_between));
+                if (i < max_reconnection_attempts - 1)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(time_to_sleep_between_reconnects));
+                }
             }
         }
     }
@@ -481,7 +485,7 @@ bool Client::processBuzzHouseQuery(const String & full_query)
         {
             const String query_to_execute = orig_ast->formatWithSecretsOneLine();
             processParsedSingleQuery(query_to_execute, query_to_execute, orig_ast);
-            server_up &= tryToReconnect(1, 1000);
+            server_up &= tryToReconnect(fuzz_config->max_reconnection_attempts, fuzz_config->time_to_sleep_between_reconnects);
         }
         else
         {
