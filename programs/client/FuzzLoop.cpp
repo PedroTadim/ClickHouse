@@ -477,10 +477,16 @@ bool Client::processBuzzHouseQuery(const String & full_query)
     {
         const char * begin = full_query.data();
 
-        orig_ast = parseQuery(begin, begin + full_query.size(), client_context->getSettingsRef(), false);
-        const String query_to_execute = orig_ast->formatWithSecretsOneLine();
-        processParsedSingleQuery(query_to_execute, query_to_execute, orig_ast);
-        server_up &= tryToReconnect(1, 1000);
+        if ((orig_ast = parseQuery(begin, begin + full_query.size(), client_context->getSettingsRef(), false)))
+        {
+            const String query_to_execute = orig_ast->formatWithSecretsOneLine();
+            processParsedSingleQuery(query_to_execute, query_to_execute, orig_ast);
+            server_up &= tryToReconnect(1, 1000);
+        }
+        else
+        {
+            have_error = true;
+        }
     }
     catch (...)
     {
@@ -495,7 +501,8 @@ bool Client::processBuzzHouseQuery(const String & full_query)
     }
     if (have_error && orig_ast)
     {
-        fmt::print(stderr, "Error on processing query '{}': {}\n", orig_ast->formatForErrorMessage(), client_exception->message());
+        const auto * exception = server_exception ? server_exception.get() : client_exception.get();
+        fmt::print(stderr, "Error on processing query '{}': {}\n", orig_ast->formatForErrorMessage(), exception->message());
     }
     return server_up;
 }

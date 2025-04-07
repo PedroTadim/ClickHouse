@@ -25,6 +25,7 @@ public:
     int main(const std::vector<String> & /*args*/) override;
 
     bool tryToReconnect(uint32_t max_reconnection_attempts, uint32_t time_to_sleep_between) override;
+
 protected:
     Poco::Util::LayeredConfiguration & getClientConfiguration() override;
 
