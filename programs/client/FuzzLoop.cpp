@@ -553,7 +553,6 @@ bool Client::buzzHouse()
     {
         String full_query2;
         std::vector<BuzzHouse::SQLQuery> peer_queries;
-        bool first = true;
         bool replica_setup = true;
         bool has_cloud_features = true;
         BuzzHouse::RandomGenerator rg(fuzz_config->seed);
@@ -582,26 +581,6 @@ bool Client::buzzHouse()
         UNUSED(v);
 
         outf << "--Session seed: " << rg.getSeed() << std::endl;
-        DB::Strings defaultSettings = {"engine_file_truncate_on_insert"};
-        defaultSettings.emplace_back(rg.nextBool() ? "s3_truncate_on_insert" : "s3_create_new_file_on_insert");
-
-        full_query.resize(0);
-        for (const auto & entry : defaultSettings)
-        {
-            full_query += fmt::format("{}{} = 1", first ? "" : ", ", entry);
-            first = false;
-        }
-        const String set = fmt::format("SET {};", full_query);
-        outf << set << std::endl;
-        if (!processTextAsSingleQuery(set))
-        {
-            throw DB::Exception(DB::ErrorCodes::BUZZHOUSE, "Couldn't setup connection settings");
-        }
-        if (external_integrations->hasClickHouseExtraServerConnection())
-        {
-            external_integrations->setDefaultSettings(BuzzHouse::PeerTableDatabase::ClickHouse, defaultSettings);
-        }
-
         /// Load server configurations for the fuzzer
         fuzz_config->loadServerConfigurations();
         loadFuzzerServerSettings(*fuzz_config);
