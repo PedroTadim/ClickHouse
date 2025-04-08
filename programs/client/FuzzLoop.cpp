@@ -820,6 +820,7 @@ bool Client::buzzHouse()
                 {
                     outf << "--Reconnecting client" << std::endl;
                     connection->disconnect();
+                    gen.setInTransaction(false);
                     server_up &= tryToReconnect(fuzz_config->max_reconnection_attempts, fuzz_config->time_to_sleep_between_reconnects);
                 }
                 else if (
