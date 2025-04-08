@@ -145,7 +145,9 @@ public:
              max_columns = 5, time_to_run = 0, type_mask = std::numeric_limits<uint32_t>::max(), max_reconnection_attempts = 3,
              time_to_sleep_between_reconnects = 3000;
     std::filesystem::path log_path = std::filesystem::temp_directory_path() / "out.sql",
-                          db_file_path = std::filesystem::temp_directory_path() / "db", fuzz_out = db_file_path / "fuzz.data";
+                          client_file_path = std::filesystem::temp_directory_path() / "db",
+                          server_file_path = std::filesystem::temp_directory_path() / "db",
+                          fuzz_client_out = client_file_path / "fuzz.data", fuzz_server_out = server_file_path / "fuzz.data";
 
     FuzzConfig()
         : cb(nullptr)

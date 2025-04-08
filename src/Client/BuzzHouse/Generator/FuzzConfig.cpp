@@ -103,11 +103,17 @@ FuzzConfig::FuzzConfig(DB::ClientBase * c, const String & path)
     }
 
     static const SettingEntries configEntries = {
-        {"db_file_path",
+        {"client_file_path",
          [&](const JSONObjectType & value)
          {
-             db_file_path = std::filesystem::path(String(value.getString()));
-             fuzz_out = db_file_path / "fuzz.data";
+             client_file_path = std::filesystem::path(String(value.getString()));
+             fuzz_client_out = client_file_path / "fuzz.data";
+         }},
+        {"server_file_path",
+         [&](const JSONObjectType & value)
+         {
+             server_file_path = std::filesystem::path(String(value.getString()));
+             fuzz_server_out = client_file_path / "fuzz.data";
          }},
         {"log_path", [&](const JSONObjectType & value) { log_path = std::filesystem::path(String(value.getString())); }},
         {"read_log", [&](const JSONObjectType & value) { read_log = value.getBool(); }},
@@ -262,9 +268,9 @@ void FuzzConfig::loadServerSettings(DB::Strings & out, const bool distinct, cons
             distinct ? "DISTINCT " : "",
             col,
             table,
-            fuzz_out.generic_string())))
+            fuzz_server_out.generic_string())))
     {
-        std::ifstream infile(fuzz_out);
+        std::ifstream infile(fuzz_client_out);
         out.clear();
         while (std::getline(infile, buf))
         {
@@ -300,9 +306,9 @@ void FuzzConfig::loadSystemTables(std::unordered_map<String, DB::Strings> & tabl
             "SELECT t.name, c.name from system.tables t JOIN system.columns c ON t.name = c.table WHERE t.database = 'system' AND "
             "c.database = 'system' INTO OUTFILE "
             "'{}' TRUNCATE FORMAT TabSeparated;",
-            fuzz_out.generic_string())))
+            fuzz_server_out.generic_string())))
     {
-        std::ifstream infile(fuzz_out);
+        std::ifstream infile(fuzz_client_out);
         while (std::getline(infile, buf) && buf.size() > 1)
         {
             if (buf[buf.size() - 1] == '\r')
@@ -340,9 +346,9 @@ bool FuzzConfig::tableHasPartitions(const bool detached, const String & database
             detached_tbl,
             db_clause,
             table,
-            fuzz_out.generic_string())))
+            fuzz_server_out.generic_string())))
     {
-        std::ifstream infile(fuzz_out);
+        std::ifstream infile(fuzz_client_out);
         if (std::getline(infile, buf))
         {
             return !buf.empty() && buf[0] != '0';
@@ -371,9 +377,9 @@ FuzzConfig::tableGetRandomPartitionOrPart(const bool detached, const bool partit
             detached_tbl,
             db_clause,
             table,
-            fuzz_out.generic_string())))
+            fuzz_server_out.generic_string())))
     {
-        std::ifstream infile(fuzz_out, std::ios::in);
+        std::ifstream infile(fuzz_client_out, std::ios::in);
         std::getline(infile, res);
     }
     return res;
